@@ -149,11 +149,11 @@ type User = Infer&lttypeof user&gt // infers { books: Book[] }
 type Book = Infer&lttypeof book&gt // infers { user: User }
         </code>
     </pre>
-<p>It turns out if works perfectly! User and Book types are well inferred despite the structure being cyclic.</p>
+<p>It turns out it works perfectly! User and Book types are well inferred despite the structure being cyclic.</p>
 <p>How is this possible? I believe that is because we haven't put any constraints on generics. As soon as we
     add constraints on generics the example above fails.
 </p>
-<p>I guess zod, typebox and valibot all have constaints on generics for DX, at the expense of not supporting
+<p>I guess zod, typebox and valibot all have constraints on generics for DX, at the expense of not supporting
     cyclic data structures.</p>
     
  <p>Now we just need to implement the runtime validation by iterating on these structures and we're good.</p>
