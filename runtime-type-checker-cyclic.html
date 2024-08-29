@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>exifers</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/water.css@2/out/light.css">
+  </head>
+  <body>
+    <h1>Runtime type-checker that supports cyclic data structures</h1>
+    <p>
+        Typescript has only compile-time type-checking. To perform runtime type-checking we often use a library like
+       <a>zod</a>, <a>typebox</a> or <a>valibot</a>. Although none of these libraries support cyclic data structures.   </p>
+    </p>
+    <p>
+        Let's take this example cyclic data structure:
+        <pre>
+        <code>
+interface User {
+    books: Book[]
+}
+
+interface Book {
+    user: User
+}
+        </code>
+        </pre>
+    </p>
+    <p>
+        The implementation in zod looks like this:
+        <pre>
+            <code>
+import * as z from 'zod'
+
+const user = z.object({
+  books: z.array(z.lazy(() => book))
+})
+
+const book = z.object({
+  user,
+})
+            </code>
+        </pre>
+    </p>
+    <p>
+        But we encounter the following error message:
+    </p>
+    <pre>
+        <code>
+'user' implicitly has type 'any' because it does not have a type annotation and is referenced
+directly or indirectly in its own initializer.(7022)
+        </code>
+    </pre>
+    <p>
+        This is the same for typebox and valibot, I tested all of them.
+    </p>
+    <h1>Home-made type-checker</h1>
+    <p>As I was searching for a solution, I discovered that it was easy to make my own type-checker supporting type inference.</p>
+    <p>We just need to create data structures that can then infer the correct type. Let's define these data structures:</p>
+    <pre>
+        <code>
+const string = (): String => ({ $$type: 'string' })
+const number = (): Number => ({ $$type: 'number' })
+const boolean = (): Boolean => ({ $$type: 'boolean' })
+const literal = &ltconst V&gt(value: V): Literal&ltV&gt => ({ $$type: 'literal', value })
+
+interface String {
+    $$type: 'string'
+}
+
+interface Number {
+    $$type: 'number'
+}
+
+interface Boolean {
+    $$type: 'boolean'
+}
+
+interface Literal&ltV&gt {
+    $$type: 'literal'
+    value: V
+}
+        </code>
+    </pre>
+    <p>Then we can build a utility type to perform inference:</p>
+    <pre>
+        <code>
+type Infer&ltS&gt =
+    S extends String ? string :
+    S extends Number ? number :
+    S extends Boolean ? boolean :
+    S extends Literal&ltinfer V&gt ? V :
+    never
+
+const a = string()
+type A = Infer&lttypeof a&gt // infers string
+
+const b = literal(2)
+type B = Infer&lttypeof b&gt // infers 2
+        </code>
+    </pre>
+    <p>Let's add support for objects, arrays and lazy:</p>
+    <pre>
+        <code>
+const object = &ltP&gt(properties: P): Object&ltP&gt => { $$type: 'object', properties }
+
+const array = &ltI&gt(item: I): Array&ltI&gt => { $$type: 'array', item }
+
+const lazy = &ltT&gt(value: T): Lazy&ltT&gt => { $$type: 'lazy', value }
+
+interface Object&ltP&gt {
+    $$type: 'object'
+    properties: P
+}
+
+interface Array&gtI&lt {
+    $$type: 'array'
+    item: I
+}
+
+interface Lazy&gtT&lt {
+    $$type: 'lazy'
+    value: T
+}
+
+type Infer&ltS&gt =
+    S extends String ? string :
+    S extends Number ? number :
+    S extends Boolean ? boolean :
+    S extends Literal&ltinfer V&gt ? V :
+    // 
+    S extends Array&ltinfer I&gt ? Infer&ltI&gt[] :
+    S extends Object&ltinfer P&gt ? {[key in keyof P]: Infer&ltP&gt} :
+    S extends Lazy&lt() => infer S&gt ? Infer&ltS&gt :
+    never
+        </code>
+    </pre>
+    <p>Now let's see if it supports a cyclic data structure:</p>
+    <pre>
+        <code>
+const user = object({
+    books: array(lazy(() => book)),
+})
+
+const book = object({
+    user,
+})
+
+type User = Infer&lttypeof user&gt // infers { books: Book[] }
+type Book = Infer&lttypeof book&gt // infers { user: User }
+        </code>
+    </pre>
+<p>It turns out if works perfectly! User and Book types are well inferred despite the structure being cyclic.</p>
+<p>How is this possible? I believe that is because we haven't put any constraints on generics. As soon as we
+    add constraints on generics the example above fails.
+</p>
+<p>I guess zod, typebox and valibot all have constaints on generics for DX, at the expense of not supporting
+    cyclic data structures.</p>
+    
+ <p>Now we just need to implement the runtime validation by iterating on these structures and we're good.</p>
+<footer>
+    <a href="/">Home</a>
+</footer>
+  </body>
+</html>
